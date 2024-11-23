@@ -1,0 +1,422 @@
+<html>
+
+<head>
+  <base href="." />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SnapShare - Interactive Image Platform</title>
+
+  <style>
+    :root {
+      --primary: #2196f3;
+      --secondary: #ff4081;
+      --dark: #212121;
+      --light: #f5f5f5;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--light);
+      color: var(--dark);
+    }
+
+    .app-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .camera-interface {
+      background: #000;
+      border-radius: 20px;
+      padding: 20px;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    #camera-feed {
+      width: 100%;
+      height: 60vh;
+      border-radius: 10px;
+      background: #333;
+    }
+
+    .filter-bar {
+      display: flex;
+      gap: 10px;
+      padding: 10px;
+      overflow-x: auto;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 10px;
+      margin: 10px 0;
+    }
+
+    .filter-option {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .filter-option:hover {
+      transform: scale(1.05);
+    }
+
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 20px;
+      padding: 20px 0;
+    }
+
+    .gallery-item {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      transition: transform 0.3s;
+    }
+
+    .gallery-item:hover {
+      transform: translateY(-5px);
+    }
+
+    .gallery-item img {
+      width: 100%;
+      height: 250px;
+      object-fit: cover;
+    }
+
+    .interaction-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-secondary {
+      background: var(--secondary);
+      color: white;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.05);
+      }
+
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    .capture-btn {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--secondary);
+      border: 4px solid white;
+      cursor: pointer;
+      animation: pulse 2s infinite;
+    }
+
+    /* Adding a loading indicator style */
+    .loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-size: 24px;
+      z-index: 1000;
+    }
+
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
+</head>
+
+<body>
+
+  <div class="app-container">
+    <div class="camera-interface">
+      <video id="camera-feed" autoplay playsinline></video>
+
+      <div class="filter-bar">
+        <button class="filter-option">Normal</button>
+        <button class="filter-option">Vintage</button>
+        <button class="filter-option">B&W</button>
+        <button class="filter-option">Sepia</button>
+        <button class="filter-option">Blur</button>
+      </div>
+
+      <button class="capture-btn" id="captureBtn"></button>
+    </div>
+
+    <div class="gallery" id="imageGallery">
+      <!-- Dynamic gallery items will be inserted here -->
+    </div>
+  </div>
+
+  <script>
+    // ImgBB API Configuration
+    const IMGBB_API_KEY = '6d89f514c5d30477437572d45d5bee12';
+    const IMGBB_API_URL = 'https://api.imgbb.com/1/upload';
+
+    // Initialize camera
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
+        });
+        const video = document.getElementById('camera-feed');
+        video.srcObject = stream;
+      } catch (err) {
+        console.error('Error accessing camera:', err);
+        alert('Please enable camera access to use this app');
+      }
+    }
+
+    // Function to show loading indicator
+    function showLoading() {
+      const loader = document.createElement('div');
+      loader.className = 'loading';
+      loader.innerHTML = `
+    <div class="loading-spinner"></div>
+  `;
+      document.body.appendChild(loader);
+    }
+
+    // Function to hide loading indicator
+    function hideLoading() {
+      const loader = document.querySelector('.loading');
+      if (loader) {
+        loader.remove();
+      }
+    }
+
+    // Function to upload image to ImgBB
+    async function uploadToImgBB(base64Image) {
+      try {
+        showLoading();
+
+        const formData = new FormData();
+        formData.append('image', base64Image.split(',')[1]); // Remove data:image/jpeg;base64, prefix
+        formData.append('key', IMGBB_API_KEY);
+
+        const response = await fetch(IMGBB_API_URL, {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          return data.data.url;
+        } else {
+          throw new Error('Upload failed');
+        }
+      } catch (error) {
+        console.error('Error uploading to ImgBB:', error);
+        alert('Failed to upload image. Please try again.');
+        return null;
+      } finally {
+        hideLoading();
+      }
+    }
+
+    // Initialize gallery with some demo content
+    function initGallery() {
+      const gallery = document.getElementById('imageGallery');
+      const demoImages = [
+        { url: 'https://picsum.photos/500/500?random=1', likes: 42, comments: 12 },
+        { url: 'https://picsum.photos/500/500?random=2', likes: 28, comments: 8 },
+        { url: 'https://picsum.photos/500/500?random=3', likes: 64, comments: 15 }
+      ];
+
+      demoImages.forEach(img => {
+        const item = createGalleryItem(img);
+        gallery.appendChild(item);
+      });
+    }
+
+    function createGalleryItem(imgData) {
+      const div = document.createElement('div');
+      div.className = 'gallery-item';
+
+      div.innerHTML = `
+    <img src="${imgData.url}" alt="User shared photograph" width="250" height="250">
+    <div class="interaction-bar">
+      <button class="btn btn-primary like-btn">
+        ❤️ ${imgData.likes}
+      </button>
+      <button class="btn btn-secondary comment-btn">
+        💬 ${imgData.comments}
+      </button>
+    </div>
+  `;
+
+      // Add event listeners
+      div.querySelector('.like-btn').addEventListener('click', handleLike);
+      div.querySelector('.comment-btn').addEventListener('click', handleComment);
+
+      return div;
+    }
+
+    function handleLike(e) {
+      const likeBtn = e.target;
+      const currentLikes = parseInt(likeBtn.textContent.match(/\d+/)[0]);
+      likeBtn.textContent = `❤️ ${currentLikes + 1}`;
+    }
+
+    function handleComment(e) {
+      const comment = prompt('Add a comment:');
+      if (comment) {
+        const commentBtn = e.target;
+        const currentComments = parseInt(commentBtn.textContent.match(/\d+/)[0]);
+        commentBtn.textContent = `💬 ${currentComments + 1}`;
+      }
+    }
+
+    // Modified capture photo function to include ImgBB upload
+    document.getElementById('captureBtn').addEventListener('click', async () => {
+      const video = document.getElementById('camera-feed');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+
+      // Apply selected filter
+      const selectedFilter = document.querySelector('.filter-option.active');
+      if (selectedFilter) {
+        applyFilter(ctx, selectedFilter.textContent);
+      }
+
+      // Get base64 image data
+      const base64Image = canvas.toDataURL('image/jpeg');
+
+      // Upload to ImgBB
+      const uploadedUrl = await uploadToImgBB(base64Image);
+
+      if (uploadedUrl) {
+        // Create gallery item with the uploaded image URL
+        const imageData = {
+          url: uploadedUrl,
+          likes: 0,
+          comments: 0
+        };
+
+        const galleryItem = createGalleryItem(imageData);
+        document.getElementById('imageGallery').prepend(galleryItem);
+      }
+    });
+
+    // Filter application
+    function applyFilter(ctx, filterName) {
+      const imageData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+      const data = imageData.data;
+
+      switch (filterName) {
+        case 'B&W':
+          for (let i = 0; i < data.length; i += 4) {
+            const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+            data[i] = data[i + 1] = data[i + 2] = avg;
+          }
+          break;
+        case 'Sepia':
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            data[i] = (r * 0.393) + (g * 0.769) + (b * 0.189);
+            data[i + 1] = (r * 0.349) + (g * 0.686) + (b * 0.168);
+            data[i + 2] = (r * 0.272) + (g * 0.534) + (b * 0.131);
+          }
+          break;
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    // Filter selection
+    document.querySelectorAll('.filter-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelector('.filter-option.active')?.classList.remove('active');
+        btn.classList.add('active');
+      });
+    });
+
+    // Initialize the app
+    window.addEventListener('load', () => {
+      initCamera();
+      initGallery();
+    });
+  </script>
+
+</body>
+
+</html>
