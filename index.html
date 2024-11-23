@@ -200,7 +200,7 @@
     <div class="camera-interface">
       <video id="camera-feed" autoplay playsinline></video>
 
-      <div class="filter-bar">
+      <div class="filter-bar" style="display:none;">
         <button class="filter-option">Normal</button>
         <button class="filter-option">Vintage</button>
         <button class="filter-option">B&W</button>
@@ -257,72 +257,72 @@
     }
 
     // Initialize gallery by fetching images from Firebase
-    function initGallery() {
+    async function initGallery() {
       const gallery = document.getElementById("imageGallery");
 
       // Get reference to the images node in Firebase
       const imagesRef = ref(database, "images");
 
-      // Get data from Firebase
-      get(imagesRef)
-        .then((snapshot) => {
-          if (snapshot.exists()) {
-            const images = snapshot.val();  // The data from Firebase
+      try {
+        // Get data from Firebase
+        const snapshot = await get(imagesRef);
+        if (snapshot.exists()) {
+          const images = snapshot.val();  // The data from Firebase
 
-            // Loop through each image object and create gallery items
-            Object.keys(images).forEach((key) => {
-              const img = images[key];
-              const item = createGalleryItem({
-                url: img.url,
-                likes: img.likes || 0,
-                comments: img.comments || 0,
-              });
-              gallery.appendChild(item);
-            });
-          } else {
-            console.log("No images found in the database.");
-          }
-        })
-        .catch((error) => {
-          console.error("Error fetching images from Firebase:", error);
-        });
+          // Loop through each image object and create gallery items
+          Object.keys(images).forEach((key) => {
+            const img = images[key];
+            const item = createGalleryItem({
+              url: img.url,
+              likes: img.likes || 0,
+              comments: img.comments || 0,
+            }, key);  // Pass the image ID (key) to handle likes update
+            gallery.appendChild(item);
+          });
+        } else {
+          console.log("No images found in the database.");
+        }
+      } catch (error) {
+        console.error("Error fetching images from Firebase:", error);
+      }
     }
 
-
     // Create gallery item
-    function createGalleryItem(imgData) {
+    function createGalleryItem(imgData, imageId) {
       const div = document.createElement("div");
       div.className = "gallery-item";
 
       div.innerHTML = `
-      <img src="${imgData.url}" alt="User shared photograph" width="250" height="250">
-      <div class="interaction-bar">
-        <button class="btn btn-primary like-btn">❤️ ${imgData.likes}</button>
-        <button class="btn btn-secondary comment-btn">💬 ${imgData.comments}</button>
-      </div>
-    `;
+    <img src="${imgData.url}" alt="User shared photograph" width="250" height="250">
+    <div class="interaction-bar" style="display:none;">
+      <button class="btn btn-primary like-btn">❤️ ${imgData.likes}</button>
+    </div>
+  `;
 
       // Add event listeners
-      div.querySelector(".like-btn").addEventListener("click", handleLike);
-      div.querySelector(".comment-btn").addEventListener("click", handleComment);
+      const likeBtn = div.querySelector(".like-btn");
+      // likeBtn.addEventListener("click", () => handleLike(imageId, imgData.likes));
 
       return div;
     }
 
-    // Handle like button
-    function handleLike(e) {
-      const likeBtn = e.target;
-      const currentLikes = parseInt(likeBtn.textContent.match(/\d+/)[0]);
-      likeBtn.textContent = `❤️ ${currentLikes + 1}`;
-    }
+    // Handle like button click
+    async function handleLike(imageId, currentLikes) {
+      const newLikes = currentLikes + 1;
 
-    // Handle comment button
-    function handleComment(e) {
-      const comment = prompt("Add a comment:");
-      if (comment) {
-        const commentBtn = e.target;
-        const currentComments = parseInt(commentBtn.textContent.match(/\d+/)[0]);
-        commentBtn.textContent = `💬 ${currentComments + 1}`;
+      // Update likes count in Firebase
+      const imageRef = ref(database, `images/${imageId}`);
+      try {
+        // Update the likes count in Firebase
+        await set(imageRef, {
+          likes: newLikes
+        });
+
+        // Update the like button text in the UI
+        const likeBtn = document.querySelector(`.gallery-item[data-id='${imageId}'] .like-btn`);
+        likeBtn.textContent = `❤️ ${newLikes}`;
+      } catch (error) {
+        console.error("Error updating likes:", error);
       }
     }
 
